@@ -1,2 +1,0 @@
-#!/bin/sh
-[ -f /tmp/dwl-keyboard-layout ] && tr -d '\n' < /tmp/dwl-keyboard-layout || echo "us"
