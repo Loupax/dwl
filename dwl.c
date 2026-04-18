@@ -1703,17 +1703,21 @@ keypressmod(struct wl_listener *listener, void *data)
 	wlr_seat_keyboard_notify_modifiers(seat,
 			&group->wlr_group->keyboard.modifiers);
 
-	/* Write current XKB layout name to file and signal someblocks */
+	/* Write current XKB layout name to file and signal someblocks, only on group change */
 	{
+		static xkb_layout_index_t last_layout = XKB_LAYOUT_INVALID;
 		struct xkb_state *xkb_state = group->wlr_group->keyboard.xkb_state;
 		if (xkb_state) {
 			xkb_layout_index_t idx = xkb_state_serialize_layout(xkb_state, XKB_STATE_LAYOUT_EFFECTIVE);
-			struct xkb_keymap *keymap = xkb_state_get_keymap(xkb_state);
-			const char *name = xkb_keymap_layout_get_name(keymap, idx);
-			if (name) {
-				FILE *f = fopen("/tmp/dwl-keyboard-layout", "w");
-				if (f) { fprintf(f, "%s\n", name); fclose(f); }
-				system("pkill -RTMIN+1 someblocks 2>/dev/null");
+			if (idx != last_layout) {
+				struct xkb_keymap *keymap = xkb_state_get_keymap(xkb_state);
+				const char *name = xkb_keymap_layout_get_name(keymap, idx);
+				if (name) {
+					FILE *f = fopen("/tmp/dwl-keyboard-layout", "w");
+					if (f) { fprintf(f, "%s\n", name); fclose(f); }
+					system("pkill -RTMIN+1 someblocks 2>/dev/null");
+				}
+				last_layout = idx;
 			}
 		}
 	}
@@ -3370,8 +3374,8 @@ dwl_wm_monitor_handle_set_client_tags(struct wl_client *client, struct wl_resour
 	newtags = (sel->tags & and) ^ xor;
 	if (newtags) {
 		sel->tags = newtags;
-		focusclient(focustop(selmon), 1);
-		arrange(selmon);
+		focusclient(focustop(mon->monitor), 1);
+		arrange(mon->monitor);
 		printstatus();
 	}
 }
@@ -3399,11 +3403,11 @@ dwl_wm_handle_get_monitor(struct wl_client *client, struct wl_resource *resource
 	struct Monitor *m = wlr_output->data;
 	struct wl_resource *dwlOutputResource = wl_resource_create(client,
 		&znet_tapesoftware_dwl_wm_monitor_v1_interface, wl_resource_get_version(resource), id);
-	if (!resource) {
+	if (!dwlOutputResource) {
 		wl_client_post_no_memory(client);
 		return;
 	}
-	dwl_wm_monitor = calloc(1, sizeof(DwlWmMonitor));
+	dwl_wm_monitor = ecalloc(1, sizeof(DwlWmMonitor));
 	dwl_wm_monitor->resource = dwlOutputResource;
 	dwl_wm_monitor->monitor = m;
 	wl_resource_set_implementation(dwlOutputResource, &dwl_wm_monitor_implementation,
